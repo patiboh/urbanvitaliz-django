@@ -26,6 +26,11 @@ function Tutorial(challengeCode, autoStart = false ) {
             //Can be empty object
             const challenge = await this.getChallenge(this.challengeCode)
             const userHasActiveChallenge = !(Object.keys(challenge).length === 0)
+console.log('challenge')
+console.log(challenge)
+
+console.log('userHasActiveChallenge')
+console.log(userHasActiveChallenge)
 
             if (challengeDefinition && userHasActiveChallenge) {
                 this.showTuto = true
@@ -85,6 +90,22 @@ function Tutorial(challengeCode, autoStart = false ) {
         async acquireChallenge(code) {
             try {
                 const json = await api.patch(challengeUrl(code), { acquired_on: true })
+
+                this.showTuto = !Boolean(json.data.acquired_on)
+                console.log('acquireChallenge - this.showTuto');
+                const challenge = await this.getChallenge(this.challengeCode)
+                console.log('acquireChallenge - challenge');
+                console.log(challenge);
+            const userHasActiveChallenge = Object.keys(challenge).length > 0
+            console.log('challenge')
+            console.log(challenge)
+            
+            console.log('userHasActiveChallenge')
+            console.log(userHasActiveChallenge)
+                console.log('acquireChallenge - this.showTuto');
+                console.log(this.showTuto);
+                console.log('json');
+                console.log(json);
                 return json.data
             }
             catch (err) {
@@ -100,6 +121,8 @@ function Tutorial(challengeCode, autoStart = false ) {
         async handleEndChallenge() {
             this.startButton = this.$refs.startTourButton
             this.startButton.style.display = "none"
+            console.log('acquireChallenge - this.challengeCode');
+            console.log(this.challengeCode);
             await this.acquireChallenge(this.challengeCode)
         }
     }
