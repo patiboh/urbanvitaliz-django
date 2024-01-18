@@ -1,6 +1,6 @@
 /* used to be able to use position sticky on children */
 [x-cloak] {
-    display: none;
+    margin-block-start: -100%;
 }
 
 .project-map-container {
@@ -11,6 +11,19 @@
     border-radius: 4px;
     overflow: hidden;
     transition: height 0.25s ease;
+}
+
+#map-static {
+    width: 100px;
+    height: 100px;
+    min-height: 100%;
+    min-width: 100%;
+    display: block;
+}
+
+.project-map-container .leaflet-map-pane {
+    height: 260px;
+    width: 100%;
 }
 
 .map-modal .modal-content {

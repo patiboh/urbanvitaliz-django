@@ -8,17 +8,16 @@ function ProjectLocation(projectOptions, modal=true) {
 		mapIsSmall: true,
 		project: null,
 		mapModal: null,
-		staticMap: null,
+		mapStatic: null,
 		interactiveMap: null,
 		zoom: 8,
 		isLoading: false,
 
 		get isBusy() {
-				return this.isLoading
+				return this.$store.geolocation.isLoading
 		},
 
 		async init() {
-			this.isLoading = true;
 			this.project = {
 				...projectOptions,
 				commune: {
@@ -27,40 +26,41 @@ function ProjectLocation(projectOptions, modal=true) {
 					longitude: projectOptions.commune.longitude
 				}
 			}
-			const { latitude, longitude, insee, name } = this.project.commune;
-			this.zoom = latitude && longitude ? this.zoom + 5 : this.zoom;
-			const geoData = {}
+			this.$store.geolocation.initGeolocationData(this.project)
+			let geoData
 			try {
-				geoData.parcels = await geolocUtils.fetchParcelsIgn(insee);
-				geoData.commune = await geolocUtils.fetchCommuneIgn(insee);
-				geoData.location = await geolocUtils.fetchGeolocationByAddress(`${this.project.location} ${name} ${insee}`);
+				geoData = this.$store.geolocation.getGeoData()
 			} catch(e) {
 				console.log(e)
 			}
-			await this.initStaticMap(this.project, geoData);
+			await	this.$store.geolocation.initMapViewer({mapId: 'map-static', interactive: false, containerId: "container-map-static"})
+		
 			if(modal) {
 				await this.initInteractiveMap(this.project, geoData);
 			}
-			let map = this.staticMap
-			setTimeout(function(){map.invalidateSize()}, 0);
+
+			// Init Modal
 			this.isLoading = false;
 		},
 
-		async initStaticMap(project, geoData) {
-			const options = mapUtils.mapOptions({interactive: false});
+		// async initStaticMap(project, geoData) {
+		// 	const options = mapUtils.mapOptions({interactive: false});
 
-			const Map = await mapUtils.initSatelliteMap('map-static', project, options, this.zoom);
-			this.staticMap = Map;
-			let markers = mapUtils.initMarkerLayer(this.staticMap, project, geoData);
-			if(!markers) {
-				mapUtils.initMapLayers(this.staticMap, project, geoData);
-			}
+		// 	const Map = await mapUtils.initSatelliteMap('map-static', project, options, this.zoom);
+		// 	this.mapStatic = Map;
+		// 	let markers = mapUtils.initMarkerLayer(this.mapStatic, project, geoData);
+		// 	if(!markers) {
+		// 		mapUtils.initMapLayers(this.mapStatic, project, geoData);
+		// 	}
+		// },
+
+		invalidateSize() {
+			const mapStatic = this.$store.geolocation.mapStatic
+			setTimeout(function(){mapStatic.invalidateSize()}, 0);
 		},
-
 		async initInteractiveMap(project, geoData) {
 			// Init Interactive Map
 			const options = mapUtils.mapOptions({interactive: true});
-			const [latitude, longitude] = mapUtils.getDefaultLatLngForMap(project, geoData)
 
 			const Map = mapUtils.initSatelliteMap('map-interactive', project, options, this.zoom + 3);
 			this.interactiveMap = Map;
@@ -77,6 +77,7 @@ function ProjectLocation(projectOptions, modal=true) {
 				position: 'topright',
 				color: '#335B7E',
 			}).addTo(this.interactiveMap);
+			const [latitude, longitude] = mapUtils.getDefaultLatLngForMap(project, geoData)
 			this.interactiveMap.panTo(new L.LatLng(latitude, longitude));
 
 			// Init Modal
