@@ -27,21 +27,23 @@ from django.views.generic.base import TemplateView
 from guardian.shortcuts import get_users_with_perms
 from notifications import models as notifications_models
 from notifications import notify
-from watson import search as watson
-
 from urbanvitaliz import verbs
 from urbanvitaliz.apps.addressbook import models as addressbook_models
 from urbanvitaliz.apps.addressbook.models import Organization
+from urbanvitaliz.apps.communication import api
 from urbanvitaliz.apps.geomatics import models as geomatics
 from urbanvitaliz.apps.home import models as home_models
-from urbanvitaliz.apps.projects.models import Project, UserProjectStatus, Topic
+from urbanvitaliz.apps.projects.models import Project, Topic, UserProjectStatus
+from urbanvitaliz.apps.reminders import models as reminders_models
 from urbanvitaliz.apps.tasks.models import Task
 from urbanvitaliz.utils import (
     get_group_for_site,
+    get_site_config_or_503,
     has_perm,
     has_perm_or_403,
     make_group_name_for_site,
 )
+from watson import search as watson
 
 from . import filters, forms, models
 
@@ -527,6 +529,56 @@ def user_notifications(request, user_id):
     return render(request, "crm/user_notifications.html", locals())
 
 
+@login_required
+def user_reminders(request, user_id):
+    has_perm_or_403(request.user, "use_crm", request.site)
+
+    crm_user = get_object_or_404(User, pk=user_id)
+
+    if request.site not in crm_user.profile.sites.all():
+        # only for user of current site
+        raise Http404
+
+    search_form = forms.CRMSearchForm()
+
+    sent_reminders = reminders_models.Reminder.on_site.filter(
+        sent_to=crm_user
+    ).order_by("-deadline")[:100]
+
+    future_reminders = reminders_models.Reminder.on_site.filter(
+        project__in=Project.on_site.filter(
+            projectmember__member=crm_user, projectmember__is_owner=True
+        ),
+        sent_on=None,
+    ).order_by("-deadline")
+
+    return render(request, "crm/user_reminders.html", locals())
+
+
+@login_required
+def user_reminder_details(request, user_id, reminder_pk):
+    has_perm_or_403(request.user, "use_crm", request.site)
+
+    crm_user = get_object_or_404(User, pk=user_id)
+    if request.site not in crm_user.profile.sites.all():
+        # only for user of current site
+        raise Http404
+
+    reminder = get_object_or_404(
+        reminders_models.Reminder, pk=reminder_pk, site=request.site, sent_to=crm_user
+    )
+
+    email = None
+    if reminder.transactions.count():
+        transaction = reminder.transactions.first()
+        if transaction:
+            email = api.fetch_transaction_content(transaction.transaction_id)
+
+    search_form = forms.CRMSearchForm()
+
+    return render(request, "crm/user_reminder_details.html", locals())
+
+
 ########################################################################
 # projects
 ########################################################################
@@ -553,6 +605,8 @@ def project_details(request, project_id):
     has_perm_or_403(request.user, "use_crm", request.site)
 
     project = get_object_or_404(Project.all_on_site, pk=project_id)
+
+    site_config = get_site_config_or_503(request.site)
 
     actions = target_stream(project)
 
@@ -638,16 +692,20 @@ def project_toggle_annotation(request, project_id=None):
 
     project = get_object_or_404(Project.on_site, pk=project_id)
 
+    site_config = get_site_config_or_503(request.site)
+
     form = forms.ProjectAnnotationForm(request.POST)
     if form.is_valid():
         tag = form.cleaned_data.get("tag")
-        annotation, _ = models.ProjectAnnotations.objects.get_or_create(
-            project=project, site=request.site
-        )
-        if tag in annotation.tags.names():
-            annotation.tags.remove(tag)
-        else:
-            annotation.tags.add(tag)
+        # check if the tag is authorized by the site configuration
+        if tag in site_config.crm_available_tags.values_list("name", flat=True):
+            annotation, _ = models.ProjectAnnotations.objects.get_or_create(
+                project=project, site=request.site
+            )
+            if tag in annotation.tags.names():
+                annotation.tags.remove(tag)
+            else:
+                annotation.tags.add(tag)
 
     url = reverse("crm-project-details", args=[project.id])
     return redirect(url)
@@ -881,7 +939,7 @@ def compute_topics_occurences(site):
         (
             (topic.name, list(topic.projects.values_list("name", "id")))
             for topic in (
-                Topic.objects.filter(projects__sites=site)
+                Topic.objects.filter(projects__sites=site, projects__deleted=None)
                 .prefetch_related("projects")
                 .distinct()
             )
@@ -893,7 +951,7 @@ def compute_topics_occurences(site):
         (
             (topic.name, list(topic.tasks.values_list("intent", "id", "project__id")))
             for topic in (
-                Topic.objects.filter(tasks__site=site)
+                Topic.objects.filter(tasks__site=site, tasks__deleted=None)
                 .prefetch_related("tasks")
                 .distinct()
             )

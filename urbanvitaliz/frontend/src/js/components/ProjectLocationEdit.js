@@ -29,9 +29,11 @@ function ProjectLocationEdit(projectOptions) {
 			this.zoom = latitude && longitude ? this.zoom + 8 : this.zoom;
 			const geoData = {}
 			try {
-				geoData.parcels = await geolocUtils.fetchParcelsIgn(insee);
-				geoData.commune = await geolocUtils.fetchCommuneIgn(insee);
-				geoData.location = await geolocUtils.fetchGeolocationByAddress(this.project.location, {name, insee, postal});
+				[geoData.parcels, geoData.commune, geoData.location] = await Promise.all([
+					geolocUtils.fetchParcelsIgn(insee),
+					geolocUtils.fetchCommuneIgn(insee),
+					geolocUtils.fetchGeolocationByAddress(`${this.project.location} ${name} ${insee}`)
+				]);
 			} catch(e) {
 				console.log(e)
 			}
@@ -59,7 +61,7 @@ function ProjectLocationEdit(projectOptions) {
 
 			// Add overlay layers (vector maps, controls and markers)
 			this.markers  =	mapUtils.initMarkerLayer(this.map, project, geoData);
-			mapUtils.initMapControllerBAN(this.map, geoData, onClick, project, this.markers);
+			const geocoderBAN =	mapUtils.initMapControllerBAN(this.map, geoData, onClick, project, this.markers);
 			if(geoData.parcels) {
 				await  mapUtils.addLayerParcels(Map, geoData.parcels);
 			}
@@ -79,6 +81,7 @@ function ProjectLocationEdit(projectOptions) {
 				if(markers[0]) {
 					markers[0].clearLayers()
 				}
+				geocoderBAN.setValue('');
 				onClick(e.latlng)
 				const marker = L.marker(e.latlng, { icon: mapUtils.createMarkerIcon('marker-onclick') }).addTo(Map);
 				marker.bindPopup(mapUtils.markerPopupTemplate({...popupOptions,location_x: e.latlng.lng, location_y: e.latlng.lat }))

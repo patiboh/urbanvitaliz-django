@@ -26,10 +26,21 @@ function ProjectLocation(projectOptions, modal=true) {
 					longitude: projectOptions.commune.longitude
 				}
 			}
-			this.$store.geolocation.initGeolocationData(this.project)
-			let geoData
+			const { latitude, longitude, insee, name } = this.project.commune;
+			this.zoom = latitude && longitude ? this.zoom + 5 : this.zoom;
+			const geoData = {}
+
+			// this.$store.geolocation.initGeolocationData(this.project)
+			// let geoData
+			// try {
+			// 	geoData = this.$store.geolocation.getGeoData()
+
 			try {
-				geoData = this.$store.geolocation.getGeoData()
+				[geoData.parcels, geoData.commune, geoData.location] = await Promise.all([
+					geolocUtils.fetchParcelsIgn(insee),
+					geolocUtils.fetchCommuneIgn(insee),
+					geolocUtils.fetchGeolocationByAddress(`${this.project.location} ${name} ${insee}`)
+				]);
 			} catch(e) {
 				console.log(e)
 			}
